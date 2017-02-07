@@ -1,5 +1,5 @@
 /**
- * MSXTransformer v0.4.0
+ * JSXTransformer v0.13.3
  */
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.JSXTransformer = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
 /**
@@ -244,7 +244,8 @@ function loadScripts(scripts) {
 
   scripts.forEach(function(script, i) {
     var options = {
-      sourceMap: true
+      // @philix: sourceMap support breaks r.js optimization. Leave it off by default
+      sourceMap: false
     };
     if (/;harmony=true(;|$)/.test(script.type)) {
       options.harmony = true;
@@ -292,7 +293,7 @@ function loadScripts(scripts) {
 }
 
 /**
- * Find and run all script tags with type="text/msx".
+ * Find and run all script tags with type="text/jsx".
  *
  * @internal
  */
@@ -302,7 +303,7 @@ function runScripts() {
   // Array.prototype.slice cannot be used on NodeList on IE8
   var jsxScripts = [];
   for (var i = 0; i < scripts.length; i++) {
-    if (/^text\/msx(;|$)/.test(scripts.item(i).type)) {
+    if (/^text\/jsx(;|$)/.test(scripts.item(i).type)) {
       jsxScripts.push(scripts.item(i));
     }
   }
@@ -314,7 +315,7 @@ function runScripts() {
   console.warn(
     'You are using the in-browser JSX transformer. Be sure to precompile ' +
     'your JSX for production - ' +
-    'https://github.com/insin/msx'
+    'http://facebook.github.io/react/docs/tooling-integration.html#jsx'
   );
 
   loadScripts(jsxScripts);
@@ -8013,7 +8014,7 @@ process.umask = function() { return 0; };
                 break;
             }
             directive = source.slice(token.range[0] + 1, token.range[1] - 1);
-            if (directive === 'use strict') {
+            if (directive === 'use ' + 'strict') {
                 strict = true;
                 if (firstRestricted) {
                     throwErrorTolerant(firstRestricted, Messages.StrictOctalLiteral);
@@ -8768,7 +8769,7 @@ process.umask = function() { return 0; };
                 break;
             }
             directive = source.slice(token.range[0] + 1, token.range[1] - 1);
-            if (directive === 'use strict') {
+            if (directive === 'use ' + 'strict') {
                 strict = true;
                 if (firstRestricted) {
                     throwErrorTolerant(firstRestricted, Messages.StrictOctalLiteral);
@@ -12333,7 +12334,7 @@ function traverse(node, path, state) {
             node.body.length > 0
             && node.body[0].type === Syntax.ExpressionStatement
             && node.body[0].expression.type === Syntax.Literal
-            && node.body[0].expression.value === 'use strict';
+            && node.body[0].expression.value === 'use ' + 'strict';
       }
 
       if (node.type === Syntax.Program) {
@@ -13795,7 +13796,7 @@ function visitClassFunctionExpression(traverse, node, path, state) {
   utils.catchup(openingBracketPosition + 1, state);
 
   if (!state.scopeIsStrict) {
-    utils.append('"use strict";', state);
+    utils.append('"use ' + 'strict";', state);
     state = utils.updateState(state, {
       scopeIsStrict: true
     });
@@ -13914,7 +13915,7 @@ function _renderClassBody(traverse, node, path, state) {
   if (!node.body.body.filter(_isConstructorMethod).pop()) {
     utils.append('function ' + className + '(){', state);
     if (!state.scopeIsStrict) {
-      utils.append('"use strict";', state);
+      utils.append('"use ' + 'strict";', state);
     }
     if (superClass.name) {
       utils.append(
@@ -15442,7 +15443,6 @@ var quoteAttrName = _dereq_('./jsx').quoteAttrName;
 
 var trimLeft = _dereq_('./jsx').trimLeft;
 
-
 /**
  * Customized desugar processor for React JSX. Currently:
  *
@@ -15467,25 +15467,7 @@ function isTagName(name) {
   return tagConvention.test(name);
 }
 
-// We assume that the Mithril runtime is already in scope
-var componentParts = {
-  startTag: 'm.component(',
-  endTag: ')',
-  startAttrs: ', ',
-  startChildren: ', [',
-  endChildren: ']'
-};
-
-var precompileParts = {
-  startTag: '{tag: ',
-  endTag: '}',
-  startAttrs: ', attrs: ',
-  startChildren: ', children: [',
-  endChildren: ']'
-};
-
 function visitReactTag(traverse, object, path, state) {
-  var parts = precompileParts;
   var openingElement = object.openingElement;
   var nameObject = openingElement.name;
   var attributesObject = openingElement.attributes;
@@ -15493,8 +15475,24 @@ function visitReactTag(traverse, object, path, state) {
   utils.catchup(openingElement.range[0], state, trimLeft);
 
   if (nameObject.type === Syntax.JSXNamespacedName && nameObject.namespace) {
-    throw new Error('Namespace tags are not supported. JSX is not XML.');
+    throw new Error('Namespace tags are not supported. ReactJSX is not XML.');
   }
+
+  // We assume that the React runtime is already in scope
+  utils.append('m(', state);
+
+  if (nameObject.type === Syntax.JSXIdentifier && isTagName(nameObject.name)) {
+    utils.append('"' + nameObject.name + '"', state);
+    utils.move(nameObject.range[1], state);
+  } else {
+    // Use utils.catchup in this case so we can easily handle
+    // JSXMemberExpressions which look like Foo.Bar.Baz. This also handles
+    // JSXIdentifiers that aren't fallback tags.
+    utils.move(nameObject.range[0], state);
+    utils.catchup(nameObject.range[1], state);
+  }
+
+  utils.append(', ', state);
 
   var hasAttributes = attributesObject.length;
 
@@ -15502,52 +15500,13 @@ function visitReactTag(traverse, object, path, state) {
     return attr.type === Syntax.JSXSpreadAttribute;
   });
 
-  // filter out whitespace
-  var childrenToRender = object.children.filter(function(child) {
-    return !(child.type === Syntax.Literal
-             && typeof child.value === 'string'
-             && child.value.match(/^[ \t]*[\r\n][ \t\r\n]*$/));
-  });
-
-  var lastRenderableIndex;
-
-  childrenToRender.forEach(function(child, index) {
-    if (child.type !== Syntax.JSXExpressionContainer ||
-        child.expression.type !== Syntax.JSXEmptyExpression) {
-      lastRenderableIndex = index;
-    }
-  });
-
-  var hasChildren = lastRenderableIndex !== undefined;
-
-  if (nameObject.type === Syntax.JSXIdentifier && isTagName(nameObject.name)) {
-    utils.append(parts.startTag, state);
-    utils.append('"' + nameObject.name + '"', state);
-    utils.move(nameObject.range[1], state);
-  } else {
-    parts = componentParts;
-    // Use utils.catchup in this case so we can easily handle
-    // JSXMemberExpressions which look like Foo.Bar.Baz. This also handles
-    // JSXIdentifiers that aren't fallback tags.
-    if (hasAttributes || hasChildren) {
-      utils.append(parts.startTag, state);
-    }
-    utils.move(nameObject.range[0], state);
-    utils.catchup(nameObject.range[1], state);
-  }
-
-  // Mithril expects an "attrs" property on pre-compiled templates
-  if (hasAttributes || parts === precompileParts || parts === componentParts && hasChildren) {
-    utils.append(parts.startAttrs, state)
-  }
-
+  // if we don't have any attributes, pass in null
   if (hasAtLeastOneSpreadProperty) {
-    // We assume that Object.assign is available to merge spread attributes
-    utils.append('Object.assign({', state);
+    utils.append('React.__spread({', state);
   } else if (hasAttributes) {
     utils.append('{', state);
-  } else if (parts === precompileParts || parts === componentParts && hasChildren) {
-    utils.append('{}', state);
+  } else {
+    utils.append('null', state);
   }
 
   // keep track of if the previous attribute was a spread attribute
@@ -15578,7 +15537,7 @@ function visitReactTag(traverse, object, path, state) {
       utils.catchup(attr.range[1] - 1, state, stripNonWhiteParen);
 
       if (!isLast) {
-        utils.append(',', state);
+        utils.append(', ', state);
       }
 
       utils.move(attr.range[1], state);
@@ -15595,7 +15554,7 @@ function visitReactTag(traverse, object, path, state) {
 
     if (attr.name.namespace) {
       throw new Error(
-         'Namespace attributes are not supported. JSX is not XML.');
+         'Namespace attributes are not supported. ReactJSX is not XML.');
     }
     var name = attr.name.name;
 
@@ -15606,13 +15565,13 @@ function visitReactTag(traverse, object, path, state) {
     }
 
     utils.append(quoteAttrName(name), state);
-    utils.append(':', state);
+    utils.append(': ', state);
 
     if (!attr.value) {
       state.g.buffer += 'true';
       state.g.position = attr.name.range[1];
       if (!isLast) {
-        utils.append(',', state);
+        utils.append(', ', state);
       }
     } else {
       utils.move(attr.name.range[1], state);
@@ -15628,6 +15587,7 @@ function visitReactTag(traverse, object, path, state) {
     utils.catchup(attr.range[1], state, trimLeft);
 
     previousWasSpread = false;
+
   });
 
   if (!openingElement.selfClosing) {
@@ -15643,9 +15603,24 @@ function visitReactTag(traverse, object, path, state) {
     utils.append(')', state);
   }
 
+  // filter out whitespace
+  var childrenToRender = object.children.filter(function(child) {
+    return !(child.type === Syntax.Literal
+             && typeof child.value === 'string'
+             && child.value.match(/^[ \t]*[\r\n][ \t\r\n]*$/));
+  });
   if (childrenToRender.length > 0) {
+    var lastRenderableIndex;
+
+    childrenToRender.forEach(function(child, index) {
+      if (child.type !== Syntax.JSXExpressionContainer ||
+          child.expression.type !== Syntax.JSXEmptyExpression) {
+        lastRenderableIndex = index;
+      }
+    });
+
     if (lastRenderableIndex !== undefined) {
-      utils.append(parts.startChildren, state);
+      utils.append(', ', state);
     }
 
     childrenToRender.forEach(function(child, index) {
@@ -15678,12 +15653,7 @@ function visitReactTag(traverse, object, path, state) {
     utils.move(object.closingElement.range[1], state);
   }
 
-  if (hasChildren) {
-    utils.append(parts.endChildren, state);
-  }
-  if (parts !== componentParts || hasAttributes || hasChildren) {
-    utils.append(parts.endTag, state);
-  }
+  utils.append(')', state);
   return false;
 }
 
