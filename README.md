@@ -17,7 +17,7 @@ todo.view = function(ctrl) {
 
 ###Installation
 
-Add `gem "mithril_rails"` to your Gemfile.
+Add `gem "ganeshpl-mithril_rails"` to your Gemfile.
 
 You can then add Mithril to your asset manifest files with `//= require mithril`
 
